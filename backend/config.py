@@ -26,9 +26,10 @@ TOP_K_SEARCH = 5
 # ─────────────────────────────────────────────
 # SAP OData
 # ─────────────────────────────────────────────
-SAP_BASE_URL   = os.getenv("SAP_BASE_URL", "https://bpts4hana01.bpterp.com:44300")
+SAP_BASE_URL   = os.getenv("SAP_BASE_URL", "https://bpts4hana.bpterp.com:44300")
 SAP_ODATA_PATH = "/sap/opu/odata/sap"
 SAP_SERVICE    = os.getenv("SAP_SERVICE", "ZSB_CDS_API")
+SAP_CLIENT     = os.getenv("SAP_CLIENT", "200")
 SAP_USER       = os.getenv("SAP_USER")
 SAP_PASSWORD   = os.getenv("SAP_PASSWORD")
 SAP_VERIFY_SSL = False   # SAP sandbox uses self-signed certs

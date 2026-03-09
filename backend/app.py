@@ -30,10 +30,13 @@ from services import search_service
 # Logging
 # ─────────────────────────────────────────────
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
+# Keep werkzeug and urllib3 at INFO to avoid flooding the console
+logging.getLogger("werkzeug").setLevel(logging.INFO)
+logging.getLogger("urllib3").setLevel(logging.INFO)
 logger = logging.getLogger(__name__)
 
 

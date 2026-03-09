@@ -8,7 +8,7 @@ anything reaches the SAP system.
 """
 
 import re
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode, quote, quote_plus
 from typing import Optional
 
 import config
@@ -103,9 +103,11 @@ def build_odata_url(
         if key not in _ALLOWED_PARAMS:
             continue
 
-        value = str(value).strip()
-        if not value:
+        # Drop None / "None" / "null" values — LLM sometimes returns these
+        if value is None or str(value).strip().lower() in ("none", "null", ""):
             continue
+
+        value = str(value).strip()
 
         if key == "$filter":
             value = _sanitize_filter(value)
@@ -135,7 +137,20 @@ def build_odata_url(
     # Always include JSON format — must not be overridable
     safe_params["$format"] = "json"
 
-    # urlencode handles proper percent-encoding of special characters
-    query_string = urlencode(safe_params, quote_via=quote)
+    # Build query string manually to keep OData $ prefixes unencoded.
+    # urlencode(quote_via=quote) would turn $filter → %24filter which SAP rejects.
+    # Only the *values* should be percent-encoded, not the param keys.
+    parts = []
+    for k, v in safe_params.items():
+        # Encode the value (spaces → %20, quotes → %27, etc.) but leave key as-is
+        encoded_value = quote(str(v), safe="*-._~ ()'")
+        parts.append(f"{k}={encoded_value}")
+
+    # sap-client must always be present — it tells SAP which tenant to use.
+    # It is NOT an OData system query option so it goes outside safe_params.
+    if config.SAP_CLIENT:
+        parts.append(f"sap-client={config.SAP_CLIENT}")
+
+    query_string = "&".join(parts)
 
     return f"{base}?{query_string}"
