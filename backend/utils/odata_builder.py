@@ -146,11 +146,6 @@ def build_odata_url(
         encoded_value = quote(str(v), safe="*-._~ ()'")
         parts.append(f"{k}={encoded_value}")
 
-    # sap-client must always be present — it tells SAP which tenant to use.
-    # It is NOT an OData system query option so it goes outside safe_params.
-    if config.SAP_CLIENT:
-        parts.append(f"sap-client={config.SAP_CLIENT}")
-
     query_string = "&".join(parts)
 
     return f"{base}?{query_string}"

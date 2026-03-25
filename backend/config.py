@@ -10,14 +10,14 @@ load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 # ─────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
 
-INDEX_FILE = str(PROJECT_ROOT / "cds_index.faiss")
+INDEX_FILE = str(PROJECT_ROOT / "cds_index_e5_large.faiss")
 META_FILE  = str(PROJECT_ROOT / "cds_meta.pkl")
 
 # ─────────────────────────────────────────────
 # Embedding model
 # ─────────────────────────────────────────────
-EMBEDDING_MODEL            = "sentence-transformers/all-MiniLM-L6-v2"
-EMBEDDING_REQUIRES_PREFIX  = False   # E5 models need True; MiniLM does not
+EMBEDDING_MODEL            = "intfloat/e5-large-v2"
+EMBEDDING_REQUIRES_PREFIX  = True    # E5 models need 'query: ' prefix at search time
 EMBEDDING_USE_FP16         = True
 EMBEDDING_KEEP_ON_CPU      = True    # keep CPU so GPU is free for Ollama
 
@@ -29,7 +29,6 @@ TOP_K_SEARCH = 5
 SAP_BASE_URL   = os.getenv("SAP_BASE_URL", "https://bpts4hana.bpterp.com:44300")
 SAP_ODATA_PATH = "/sap/opu/odata/sap"
 SAP_SERVICE    = os.getenv("SAP_SERVICE", "ZSB_CDS_API")
-SAP_CLIENT     = os.getenv("SAP_CLIENT", "200")
 SAP_USER       = os.getenv("SAP_USER")
 SAP_PASSWORD   = os.getenv("SAP_PASSWORD")
 SAP_VERIFY_SSL = False   # SAP sandbox uses self-signed certs
