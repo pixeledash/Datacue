@@ -31,6 +31,7 @@ SAP_ODATA_PATH = "/sap/opu/odata/sap"
 SAP_SERVICE    = os.getenv("SAP_SERVICE", "ZSB_CDS_API")
 SAP_USER       = os.getenv("SAP_USER")
 SAP_PASSWORD   = os.getenv("SAP_PASSWORD")
+SAP_CLIENT     = os.getenv("SAP_CLIENT", "200")
 SAP_VERIFY_SSL = False   # SAP sandbox uses self-signed certs
 SAP_TIMEOUT    = 15      # seconds
 

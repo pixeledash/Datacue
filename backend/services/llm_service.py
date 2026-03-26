@@ -18,6 +18,7 @@ safe fallback so the pipeline never hard-fails due to an LLM hiccup.
 import json
 import logging
 import re
+import time
 from typing import Any, Optional
 
 import requests
@@ -26,6 +27,19 @@ import config
 from utils.validation import sanitize_llm_output
 
 logger = logging.getLogger(__name__)
+
+# #region agent log
+_DEBUG_LOG_PATH = "/home/labadmin/datacue/Datacue/.cursor/debug-cf6be8.log"
+
+def _debug_log(location: str, message: str, data: dict, hypothesis: str = "") -> None:
+    try:
+        entry = json.dumps({"sessionId": "cf6be8", "timestamp": int(time.time() * 1000),
+                            "location": location, "message": message, "data": data, "hypothesisId": hypothesis})
+        with open(_DEBUG_LOG_PATH, "a") as f:
+            f.write(entry + "\n")
+    except Exception:
+        pass
+# #endregion
 
 
 # ─────────────────────────────────────────────
@@ -122,7 +136,14 @@ YOUR TASK:
 
 RULES:
 - Use only field names that appear in the chosen view's Fields list above.
-- If the query implies no filter, omit "$filter" from odata_params.
+- "$filter" RULES (read carefully):
+  * Only include "$filter" when the user explicitly states a specific value to filter by,
+    for example: "show billing status for document 4500012345" or "cost centers in company code 1000".
+  * NEVER add "$filter" for general list/browse queries like "show me X", "list X", "what are X".
+  * NEVER use a keyword from the user's query as a filter value (e.g. do NOT do: SomeField eq 'SD').
+  * NEVER use a field name as its own filter value (e.g. do NOT do: FieldName eq 'FieldName').
+  * NEVER invent placeholder values like '123456789' or 'ABC'.
+  * When in doubt, omit "$filter" entirely and return all records.
 - If the query asks for specific fields, populate "$select" with a comma-separated list.
 - Default "$top" to "50" unless the query specifies a different limit.
 - Return ONLY the JSON object below, nothing else.
@@ -217,10 +238,22 @@ YOUR TASK:
 
 VISUALIZATION TYPE RULES:
 - "table"      → default for any list or detail data
-- "bar_chart"  → comparisons across categories (e.g. sales by region, count by status)
-- "line_chart" → trends over time (e.g. monthly order totals)
-- "pie_chart"  → proportions / share (e.g. % by category)
+- "bar_chart"  → comparisons across categories; ONLY use when a genuine numeric field exists for y_axis
+- "line_chart" → trends over time; ONLY use when a genuine numeric field exists for y_axis
+- "pie_chart"  → proportions / share; ONLY use when a genuine numeric field exists for value_field
 - "none"       → single value answer or data not visualizable
+
+CHART RULES (read carefully — violations cause blank screens):
+- For "bar_chart" / "line_chart": BOTH "x_axis" and "y_axis" MUST be actual field names present in the rows.
+  "y_axis" MUST be a field whose values are numbers (e.g. amounts, counts, quantities).
+  If no numeric field exists in the data, use "table" instead.
+- For "pie_chart": BOTH "label_field" and "value_field" MUST be actual field names present in the rows.
+  "value_field" MUST contain numbers. If no numeric field, use "table" instead.
+- If the user asks for a count-by-category chart and the raw data has no count field, YOU must
+  aggregate: group the rows by the category field, count occurrences, and build a new rows array
+  like [{{"Category": "X", "Count": 3}}, ...] using "Count" as y_axis / value_field.
+- NEVER set x_axis, y_axis, label_field, or value_field to null for a chart type — if you cannot
+  fill them with real values, switch to "table".
 
 RULES:
 - The "message" field must be plain language — no technical jargon.
@@ -292,6 +325,20 @@ def call_llm_summarize(
         "type": "none", "title": "", "columns": None, "rows": None,
         "x_axis": None, "y_axis": None, "label_field": None, "value_field": None,
     })
+
+    # #region agent log
+    viz = result.get("visualization", {})
+    _debug_log("llm_service.py:llm2-result", "LLM #2 visualization spec", {
+        "type": viz.get("type"),
+        "x_axis": viz.get("x_axis"),
+        "y_axis": viz.get("y_axis"),
+        "label_field": viz.get("label_field"),
+        "value_field": viz.get("value_field"),
+        "rows_count": len(viz.get("rows") or []),
+        "columns": viz.get("columns"),
+        "rows_sample": (viz.get("rows") or [])[:2],
+    }, hypothesis="A-B-C")
+    # #endregion
 
     return result
 

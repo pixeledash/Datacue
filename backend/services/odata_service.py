@@ -16,6 +16,7 @@ Handles:
 
 import logging
 from typing import Optional
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 import requests
 import urllib3
@@ -70,6 +71,14 @@ def _get_session() -> requests.Session:
                 "Chrome/120.0.0.0 Safari/537.36"
             ),
         })
+
+        # Pre-set the SAP client cookie so it takes precedence over
+        # whatever sap-usercontext the 401 response tries to set.
+        _session.cookies.set(
+            "sap-usercontext",
+            f"sap-client={config.SAP_CLIENT}",
+            domain=config.SAP_BASE_URL.split("//")[-1].split(":")[0],
+        )
 
         # Fix 4: attach debug-logging hook to every response
         _session.hooks["response"].append(_log_request_hook)
@@ -226,18 +235,22 @@ def fetch_odata(url: str) -> tuple[list[dict], int]:
     logger.info("SAP OData response: HTTP %d", response.status_code)
 
     if response.status_code == 401:
-        # Log the exact response body so we can tell apart:
-        #   - True Basic Auth 401 (short text/XML body)
-        #   - SAP ICM login-page 401 (long HTML body — "Anmeldung fehlgeschlagen")
         body_preview = response.text[:300].replace("\n", " ")
         logger.error("SAP 401 body preview: %s", body_preview)
-        is_login_page = "<html" in response.text[:100].lower()
-        detail = (
-            "SAP ICM is serving its HTML login page — Basic Auth may be disabled "
-            "at the ICM level, or the User-Agent is being blocked."
-            if is_login_page
-            else "SAP authentication failed. Check SAP_USER and SAP_PASSWORD."
-        )
+        # If www-authenticate: Basic is present, SAP accepted the auth scheme but
+        # rejected the credentials ("Anmeldung fehlgeschlagen" = Login Failed).
+        # If the header is absent, ICM is blocking before Basic Auth is evaluated.
+        has_basic_challenge = "basic" in response.headers.get("www-authenticate", "").lower()
+        if has_basic_challenge:
+            detail = (
+                "SAP credentials rejected (HTTP 401). "
+                "Check SAP_USER and SAP_PASSWORD in your .env file."
+            )
+        else:
+            detail = (
+                "SAP ICM is serving its login page without a Basic Auth challenge — "
+                "Basic Auth may be disabled at the ICM level, or the User-Agent is being blocked."
+            )
         raise ODataFetchError(detail, error_code="SAP_AUTH_ERROR", status_code=401)
 
     if response.status_code == 403:
@@ -248,6 +261,19 @@ def fetch_odata(url: str) -> tuple[list[dict], int]:
         )
 
     if response.status_code == 404:
+        # $select may contain CDS-view fields that the OData service doesn't expose
+        # (corpus metadata ≠ fields actually published by ZSB_CDS_API). Strip $select
+        # and retry once so SAP returns all fields it does expose.
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        if "$select" in params:
+            params.pop("$select")
+            new_query = urlencode({k: v[0] for k, v in params.items()})
+            retry_url = urlunparse(parsed._replace(query=new_query))
+            logger.warning(
+                "OData 404 with $select — retrying without $select: %s", retry_url
+            )
+            return fetch_odata(retry_url)
         logger.warning("OData 404 — entity set not found or no records: %s", url)
         return [], 0
 
@@ -259,6 +285,20 @@ def fetch_odata(url: str) -> tuple[list[dict], int]:
         )
 
     if not response.ok:
+        # On HTTP 400 the LLM may have generated an invalid $filter (wrong type,
+        # placeholder value, Python None literal, etc.). Strip $filter and retry
+        # once before giving up — same pattern as the 404/$select retry above.
+        if response.status_code == 400:
+            parsed = urlparse(url)
+            params = parse_qs(parsed.query, keep_blank_values=True)
+            if "$filter" in params:
+                params.pop("$filter")
+                new_query = urlencode({k: v[0] for k, v in params.items()})
+                retry_url = urlunparse(parsed._replace(query=new_query))
+                logger.warning(
+                    "OData 400 with $filter — retrying without $filter: %s", retry_url
+                )
+                return fetch_odata(retry_url)
         logger.error("SAP unexpected status %d. Body: %s", response.status_code, response.text[:500])
         raise ODataFetchError(
             f"Unexpected HTTP {response.status_code} from SAP.",

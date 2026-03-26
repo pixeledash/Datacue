@@ -18,11 +18,9 @@ export default function VisualizationPanel({ visualization }: VisualizationPanel
   const hasChart = type !== "none" && type !== "table";
   const [showTable, setShowTable] = useState(false);
 
-  if (type === "none" || rows.length === 0) return null;
+  if (type === "none" || (rows ?? []).length === 0) return null;
 
   const renderChart = () => {
-    if (!hasChart || showTable) return null;
-
     if (type === "bar_chart" && x_axis && y_axis) {
       return (
         <BarChartViz rows={rows} x_axis={x_axis} y_axis={y_axis} title={title} />
@@ -46,7 +44,9 @@ export default function VisualizationPanel({ visualization }: VisualizationPanel
     return null;
   };
 
-  const showingTable = !hasChart || showTable;
+  // If LLM declared a chart type but couldn't supply valid axes, fall back to table
+  const chartElement = hasChart && !showTable ? renderChart() : null;
+  const showingTable = !hasChart || showTable || chartElement === null;
 
   return (
     <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-sm p-5">
@@ -87,7 +87,7 @@ export default function VisualizationPanel({ visualization }: VisualizationPanel
       {showingTable ? (
         <DataTable columns={columns} rows={rows} title={hasChart ? undefined : title} />
       ) : (
-        renderChart()
+        chartElement
       )}
     </div>
   );

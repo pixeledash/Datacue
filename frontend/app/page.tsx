@@ -162,7 +162,7 @@ export default function HomePage() {
               {response.success ? (
                 <>
                   <ResponseCard response={response} />
-                  {response.visualization && response.visualization.rows.length > 0 && (
+                  {response.visualization && (response.visualization.rows ?? []).length > 0 && (
                     <VisualizationPanel visualization={response.visualization} />
                   )}
                 </>

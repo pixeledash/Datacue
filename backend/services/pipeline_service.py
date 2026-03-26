@@ -33,8 +33,8 @@ def _empty_visualization() -> dict:
     return {
         "type": "none",
         "title": "",
-        "columns": None,
-        "rows": None,
+        "columns": [],
+        "rows": [],
         "x_axis": None,
         "y_axis": None,
         "label_field": None,
